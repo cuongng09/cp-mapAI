@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CP Foods · Điều hành Lạnh — Demo Lộ trình &amp; HUD</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #07141c;
+    --bg-soft: #0c1f29;
+    --panel: #0f2933;
+    --panel-2: #122f3a;
+    --line: rgba(94,230,208,0.14);
+    --frost: #5ee6d0;
+    --frost-dim: #2e6b66;
+    --amber: #ffb648;
+    --red: #ff5e5e;
+    --green: #3fd18b;
+    --aeon: #ff4d8d;
+    --text: #eaf6f4;
+    --text-dim: #7fa0a0;
+    --radius: 14px;
+    --display: 'Rajdhani', sans-serif;
+    --body: 'Be Vietnam Pro', sans-serif;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0; font-family: var(--body); background: var(--bg); color: var(--text);
+    overflow:hidden;
+  }
+  .app{ display:flex; height:100vh; width:100vw; }
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{
+    width: 380px; min-width:380px; height:100%; background: var(--bg-soft);
+    border-right: 1px solid var(--line); display:flex; flex-direction:column;
+    z-index: 500;
+  }
+  .brand{
+    padding: 18px 20px 14px; border-bottom: 1px solid var(--line);
+    display:flex; align-items:center; gap:12px; flex-shrink:0;
+  }
+  .brand .mark{
+    width:40px; height:40px; border-radius:10px; background: linear-gradient(140deg,var(--frost),var(--frost-dim));
+    display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;
+    box-shadow: 0 0 18px rgba(94,230,208,0.35);
+  }
+  .brand h1{ font-family: var(--display); font-size:18px; font-weight:700; letter-spacing:1px; margin:0; }
+  .brand p{ margin:2px 0 0; font-size:11px; color:var(--text-dim); letter-spacing:1.5px; text-transform:uppercase; }
+
+  .panels{ flex:1; overflow-y:auto; padding: 14px 16px 24px; display:flex; flex-direction:column; gap:14px; }
+  .panels::-webkit-scrollbar{ width:6px; }
+  .panels::-webkit-scrollbar-thumb{ background: var(--frost-dim); border-radius:3px; }
+
+  .card{
+    background: var(--panel); border:1px solid var(--line); border-radius: var(--radius);
+    padding: 14px; position:relative; overflow:hidden;
+  }
+  .card::before{
+    content:""; position:absolute; top:0; left:0; width:3px; height:100%;
+    background: linear-gradient(180deg,var(--frost),transparent);
+  }
+  .card h2{
+    font-family: var(--display); font-size:13px; letter-spacing:2px; text-transform:uppercase;
+    color: var(--frost); margin:0 0 10px; font-weight:600;
+    display:flex; align-items:center; gap:8px;
+  }
+  .card h2 .num{
+    font-size:11px; background: var(--panel-2); border:1px solid var(--line); color:var(--text-dim);
+    border-radius:4px; padding:1px 6px;
+  }
+
+  textarea, input[type=text], input[type=number]{
+    width:100%; background: var(--bg); border:1px solid var(--line); color: var(--text);
+    border-radius:8px; padding:9px 10px; font-family: var(--body); font-size:13.5px;
+    resize: vertical; outline:none; transition: border-color .15s;
+  }
+  textarea{ min-height:74px; line-height:1.45; }
+  textarea:focus, input:focus{ border-color: var(--frost); }
+  textarea::placeholder, input::placeholder{ color: rgba(127,160,160,0.6); }
+
+  .row{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+  .row.tight{ margin-top:6px; }
+
+  button{
+    font-family: var(--body); font-weight:600; font-size:12.5px; border:1px solid var(--line);
+    background: var(--panel-2); color: var(--text); border-radius:8px; padding:8px 12px;
+    cursor:pointer; transition: all .15s; display:inline-flex; align-items:center; gap:6px;
+    white-space:nowrap;
+  }
+  button:hover{ border-color: var(--frost); color: var(--frost); }
+  button:active{ transform: scale(.97); }
+  button.primary{
+    background: linear-gradient(135deg, var(--frost), #34a596); color:#06231f; border:none;
+    flex:1; justify-content:center; font-size:13px; padding:10px 12px;
+  }
+  button.primary:hover{ filter: brightness(1.08); color:#06231f; }
+  button.ghost{ background: transparent; }
+  button.mic.listening{ background: var(--red); color:#fff; border-color: var(--red); animation: pulse 1s infinite; }
+  button:disabled{ opacity:.4; cursor:not-allowed; }
+  @keyframes pulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(255,94,94,.5);} 50%{ box-shadow:0 0 0 8px rgba(255,94,94,0);} }
+
+  .hint{ font-size:11.5px; color: var(--text-dim); margin-top:6px; line-height:1.5; }
+  .hint b{ color: var(--frost); }
+
+  /* Stop list */
+  .stops{ display:flex; flex-direction:column; gap:6px; max-height: 330px; overflow-y:auto; }
+  .stops::-webkit-scrollbar{ width:5px; }
+  .stops::-webkit-scrollbar-thumb{ background: var(--frost-dim); border-radius:3px; }
+  .stop{
+    display:flex; align-items:center; gap:10px; background: var(--panel-2); border:1px solid var(--line);
+    border-radius:9px; padding:8px 10px; cursor:pointer; transition: border-color .15s;
+  }
+  .stop:hover{ border-color: var(--frost); }
+  .stop.done{ opacity:.55; }
+  .stop .badge{
+    flex-shrink:0; width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    font-family: var(--display); font-weight:700; font-size:13px; color:#06231f;
+    background: var(--frost);
+  }
+  .stop.aeon .badge{ background: var(--aeon); font-size:10px; letter-spacing:.5px; }
+  .stop.start .badge{ background: var(--amber); }
+  .stop .meta{ flex:1; min-width:0; }
+  .stop .name{ font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .stop .sub{ font-size:11px; color: var(--text-dim); margin-top:1px; }
+  .stop .status{ font-size:16px; flex-shrink:0; }
+  .stop.unresolved{ border-color: var(--red); }
+  .stop.unresolved .badge{ background: var(--red); }
+
+  .empty{ font-size:12px; color:var(--text-dim); text-align:center; padding: 16px 0; }
+
+  /* ---------- Map area ---------- */
+  .map-wrap{ flex:1; position:relative; height:100%; }
+  #map{ position:absolute; inset:0; background:#0b1b22; }
+  .leaflet-container{ font-family: var(--body); background:#0b1b22; }
+
+  /* Mobile sidebar toggle */
+  .sb-toggle{ display:none; }
+
+  /* Top status bar */
+  .topbar{
+    position:absolute; top:14px; left:14px; right:14px; z-index:600; display:flex; gap:10px;
+    align-items:flex-start; justify-content:space-between; pointer-events:none;
+  }
+  .pill{
+    pointer-events:auto; background: rgba(15,41,51,0.88); border:1px solid var(--line); border-radius:10px;
+    padding:8px 12px; font-size:12px; backdrop-filter: blur(6px); display:flex; align-items:center; gap:8px;
+  }
+  .pill .dot{ width:7px; height:7px; border-radius:50%; background: var(--text-dim); }
+  .pill .dot.on{ background: var(--green); box-shadow:0 0 8px var(--green); }
+  .pill .dot.warn{ background: var(--red); box-shadow:0 0 8px var(--red); }
+
+  .controls{
+    pointer-events:auto; background: rgba(15,41,51,0.92); border:1px solid var(--line); border-radius:12px;
+    padding:12px 14px; backdrop-filter: blur(6px); width: 250px; display:flex; flex-direction:column; gap:9px;
+  }
+  .controls .crow{ display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11.5px; color: var(--text-dim); }
+  .controls .crow b{ color: var(--text); font-family: var(--display); font-size:13px; }
+  .controls input[type=range]{ width:100%; accent-color: var(--frost); }
+  .controls .btnrow{ display:flex; gap:6px; }
+  .controls .btnrow button{ flex:1; justify-content:center; }
+  label.toggle{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-dim); cursor:pointer; margin-top:4px; }
+  input[type=checkbox]{ accent-color: var(--frost); width:14px; height:14px; flex-shrink:0; }
+  .src-badge{ font-size:9px; color: var(--frost); border:1px solid var(--frost-dim); border-radius:4px; padding:0 4px; margin-left:5px; }
+
+  /* ---------- HUD ---------- */
+  .hud{
+    position:absolute; bottom:16px; left:16px; z-index:600; display:flex; align-items:flex-end; gap:12px;
+    pointer-events:none;
+  }
+  .gauge-wrap{
+    pointer-events:auto; width:172px; height:172px; position:relative;
+    filter: drop-shadow(0 6px 18px rgba(0,0,0,0.5));
+  }
+  .gauge-wrap svg{ width:100%; height:100%; display:block; }
+  .needle{ transform-origin: 100px 100px; transition: transform .12s linear; }
+  .needle.over .needle-shape{ fill: var(--red); filter: drop-shadow(0 0 6px var(--red)); }
+  .needle-shape{ fill: var(--frost); filter: drop-shadow(0 0 5px var(--frost)); transition: fill .2s; }
+  .readout{ font-family: var(--display); }
+  .readout .val{ font-size:34px; font-weight:700; fill: var(--text); }
+  .readout .unit{ font-size:10px; fill: var(--text-dim); letter-spacing:2px; }
+  .readout .lim{ font-size:10px; fill: var(--text-dim); }
+
+  .hud-info{
+    pointer-events:auto; background: rgba(15,41,51,0.92); border:1px solid var(--line); border-radius:12px;
+    padding:12px 14px; backdrop-filter: blur(6px); min-width:190px; display:flex; flex-direction:column; gap:8px;
+    margin-bottom: 8px;
+  }
+  .hud-info .label{ font-size:10px; letter-spacing:2px; color: var(--text-dim); text-transform:uppercase; }
+  .hud-info .big{ font-family: var(--display); font-size:20px; font-weight:700; color:var(--frost); }
+  .hud-info hr{ border:none; border-top:1px solid var(--line); margin:2px 0; }
+  .voice-log{
+    font-size:11.5px; color: var(--text); background: var(--panel-2); border-radius:8px; padding:6px 8px;
+    max-height:54px; overflow:hidden; line-height:1.4; border-left:2px solid var(--frost);
+  }
+
+  /* Legend */
+  .legend{
+    position:absolute; bottom:16px; right:16px; z-index:600; background: rgba(15,41,51,0.92);
+    border:1px solid var(--line); border-radius:10px; padding:9px 12px; font-size:11px; color:var(--text-dim);
+    display:flex; flex-direction:column; gap:5px; backdrop-filter: blur(6px);
+  }
+  .legend .lk{ display:flex; align-items:center; gap:6px; }
+  .legend .sw{ width:16px; height:4px; border-radius:2px; }
+
+  /* Custom leaflet markers */
+  .pin{
+    width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    font-family: var(--display); font-weight:700; font-size:12px; color:#06231f; background: var(--frost);
+    border:2px solid #06231f; box-shadow:0 2px 6px rgba(0,0,0,.4);
+  }
+  .pin.aeon{ background: var(--aeon); font-size:9px; }
+  .pin.start{ background: var(--amber); }
+  .pin.done{ background: var(--text-dim); }
+  .truck-icon{ font-size:26px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); transform: translateY(2px); }
+
+  /* Responsive */
+  @media (max-width: 880px){
+    .sidebar{
+      position:absolute; left:0; top:0; bottom:0; width: 86vw; max-width:380px;
+      transform: translateX(-100%); transition: transform .25s ease; box-shadow: 8px 0 24px rgba(0,0,0,.4);
+    }
+    .sidebar.open{ transform: translateX(0); }
+    .sb-toggle{
+      display:flex; position:absolute; top:14px; left:14px; z-index:700; pointer-events:auto;
+      background: rgba(15,41,51,0.92); border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+      font-size:18px; color:var(--frost); backdrop-filter: blur(6px);
+    }
+    .topbar{ left:64px; }
+    .controls{ width: 200px; }
+    .hud-info{ display:none; }
+    .gauge-wrap{ width:128px; height:128px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===================== SIDEBAR ===================== -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="mark">🧊</div>
+      <div>
+        <h1>CP FOODS · ĐIỀU HÀNH LẠNH</h1>
+        <p>Quy hoạch lộ trình &amp; HUD tốc độ</p>
+      </div>
+    </div>
+
+    <div class="panels">
+
+      <!-- Start point -->
+      <div class="card">
+        <h2><span class="num">1</span> Điểm xuất phát</h2>
+        <input type="text" id="gpsInput" placeholder="Dán toạ độ GPS, vd: 21.0245, 105.8412">
+        <div class="row">
+          <button class="ghost" id="btnUseGps" title="Bóc tách toạ độ từ chuỗi GPS">📍 Vị trí bảo mật của tôi</button>
+          <button class="ghost" id="btnGeoloc" title="Lấy vị trí hiện tại của thiết bị">🛰️ Lấy vị trí hiện tại</button>
+        </div>
+        <div class="hint" id="startHint">Chưa đặt điểm xuất phát — đang dùng <b>Kho lạnh CP Pháp Vân</b> (mặc định).</div>
+      </div>
+
+      <!-- Delivery text input -->
+      <div class="card">
+        <h2><span class="num">2</span> Nhập lộ trình giao hàng</h2>
+        <textarea id="routeText" placeholder="Ví dụ: giao hàng tại Aeon Long Biên rồi về Chợ Đồng Xuân, tiếp theo ghé Royal City..."></textarea>
+        <div class="row">
+          <button class="mic" id="btnMic">🎙️ Ghi âm giọng nói</button>
+          <button class="ghost" id="btnDemo">⚡ Điền ví dụ</button>
+        </div>
+        <div class="row tight">
+          <button class="primary" id="btnOptimize">🤖 Phân tích &amp; Tối ưu lộ trình (AI)</button>
+        </div>
+        <div class="hint">AI ưu tiên xếp <b>tất cả điểm Aeon</b> lên đầu, sau đó sắp xếp các điểm còn lại theo <b>chặng ngắn nhất (Nearest Neighbor)</b>.</div>
+      </div>
+
+      <!-- Data sources -->
+      <div class="card">
+        <h2>⚙️ Nguồn dữ liệu thực</h2>
+        <label class="toggle">
+          <input type="checkbox" id="aiToggle" checked> Dùng AI (Claude) để bóc tách điểm giao thông minh
+        </label>
+        <div class="hint">Khi tắt, hệ thống chỉ tách câu theo quy tắc đơn giản (từ nối "rồi", "về", "tiếp theo"...).</div>
+        <input type="text" id="tomtomKey" placeholder="API key TomTom Traffic (tuỳ chọn)" style="margin-top:8px;">
+        <div class="hint">
+          Địa điểm <b>không có trong CSDL nội bộ</b> sẽ tự tra cứu qua OpenStreetMap (Nominatim) — bao quát toàn quốc.<br>
+          Nếu nhập <b>TomTom Traffic API key</b>, bản đồ tô màu theo mật độ giao thông <b>thời gian thực</b>; để trống sẽ hiển thị dữ liệu mô phỏng (DEMO). Lấy key miễn phí tại <b>developer.tomtom.com</b>.
+        </div>
+      </div>
+
+      <!-- Stop list -->
+      <div class="card">
+        <h2><span class="num">3</span> Danh sách điểm giao <span class="num" id="stopCount">0</span></h2>
+        <div class="stops" id="stopList">
+          <div class="empty">Chưa có điểm giao nào. Nhập lộ trình ở trên rồi nhấn “Tối ưu lộ trình”.</div>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+  <button class="sb-toggle" id="sbToggle">☰</button>
+
+  <!-- ===================== MAP ===================== -->
+  <main class="map-wrap">
+    <div id="map"></div>
+
+    <div class="topbar">
+      <div class="pill"><span class="dot" id="ttsDot"></span> Trợ lý giọng nói: <span id="ttsState">tắt</span></div>
+
+      <div class="controls">
+        <div class="crow"><span>Tốc độ xe mô phỏng</span><b id="speedLabel">40 km/h</b></div>
+        <input type="range" id="speedSlider" min="0" max="100" value="40">
+        <div class="crow"><span>Giới hạn tốc độ khu vực</span><b id="limitLabel">50 km/h</b></div>
+        <input type="range" id="limitSlider" min="20" max="100" value="50">
+        <div class="crow"><span>Hệ số thời gian mô phỏng</span><b id="accelLabel">×30</b></div>
+        <input type="range" id="accelSlider" min="1" max="100" value="30">
+        <label class="toggle"><input type="checkbox" id="ttsToggle" checked> Phát giọng nói tiếng Việt</label>
+        <label class="toggle"><input type="checkbox" id="trafficToggle" checked> Mô phỏng tắc đường thời gian thực</label>
+        <div class="btnrow">
+          <button class="primary" id="btnPlay">▶ Bắt đầu</button>
+          <button id="btnReset">⟲ Đặt lại</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud">
+      <div class="hud-info">
+        <div class="label">Điểm đến kế tiếp</div>
+        <div class="big" id="nextStopName">—</div>
+        <hr>
+        <div class="label">Khoảng cách còn lại</div>
+        <div class="big" id="distRemain">— km</div>
+        <div class="label" style="margin-top:2px;">Đã hoàn thành</div>
+        <div class="big" id="progressPct">0%</div>
+        <div class="voice-log" id="voiceLog">🔇 Trợ lý giọng nói chưa hoạt động.</div>
+      </div>
+
+      <div class="gauge-wrap">
+        <svg viewBox="0 0 200 200">
+          <defs>
+            <radialGradient id="glass" cx="50%" cy="38%" r="75%">
+              <stop offset="0%" stop-color="rgba(255,255,255,0.16)"/>
+              <stop offset="55%" stop-color="rgba(255,255,255,0.03)"/>
+              <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+            </radialGradient>
+          </defs>
+          <circle cx="100" cy="100" r="92" fill="#0c2228" stroke="var(--line)" stroke-width="2"/>
+          <path id="arcBg" fill="none" stroke="rgba(94,230,208,0.18)" stroke-width="10" stroke-linecap="round"/>
+          <path id="arcSafe" fill="none" stroke="#3fd18b" stroke-width="10" stroke-linecap="round"/>
+          <path id="arcDanger" fill="none" stroke="#ff5e5e" stroke-width="10" stroke-linecap="round" opacity="0.55"/>
+          <g id="ticks"></g>
+          <g class="needle" id="needle">
+            <polygon class="needle-shape" points="100,30 95,104 105,104"/>
+            <circle cx="100" cy="104" r="7" fill="#0c2228" stroke="var(--frost)" stroke-width="2"/>
+          </g>
+          <circle cx="100" cy="100" r="92" fill="url(#glass)"/>
+          <g class="readout" text-anchor="middle">
+            <text x="100" y="138" class="val" id="speedVal">0</text>
+            <text x="100" y="153" class="unit">KM/H</text>
+            <text x="100" y="172" class="lim" id="limText">Giới hạn 50</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div style="font-weight:700; color:var(--text); margin-bottom:2px;">Mật độ giao thông <span id="legendNote" style="font-weight:400; color:var(--text-dim);"></span></div>
+      <div class="lk"><span class="sw" style="background:#3fd18b"></span> Thông thoáng</div>
+      <div class="lk"><span class="sw" style="background:#ffb648"></span> Đông xe</div>
+      <div class="lk"><span class="sw" style="background:#ff5e5e"></span> Tắc nghẽn</div>
+    </div>
+  </main>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ============================================================
+   1. DỮ LIỆU ĐỊA ĐIỂM (geocoding offline cho các điểm phổ biến)
+   ============================================================ */
+const LOCATIONS = [
+  {name:'Aeon Mall Long Biên', lat:21.0478, lon:105.9379, key:'aeon long bien'},
+  {name:'Aeon Mall Hà Đông', lat:20.9709, lon:105.7569, key:'aeon ha dong'},
+  {name:'Aeon Mall Hoàng Mai', lat:20.9706, lon:105.8420, key:'aeon hoang mai'},
+  {name:'Aeon Mall Hải Phòng', lat:20.8398, lon:106.6880, key:'aeon hai phong'},
+  {name:'Chợ Đồng Xuân', lat:21.0354, lon:105.8497, key:'cho dong xuan'},
+  {name:'Chợ Hà Đông', lat:20.9722, lon:105.7780, key:'cho ha dong'},
+  {name:'Vincom Center Bà Triệu', lat:21.0136, lon:105.8489, key:'vincom ba trieu'},
+  {name:'Vincom Plaza Long Biên', lat:21.0445, lon:105.9351, key:'vincom long bien'},
+  {name:'Royal City', lat:21.0024, lon:105.8157, key:'royal city'},
+  {name:'Times City', lat:20.9986, lon:105.8665, key:'times city'},
+  {name:'Lotte Center Hà Nội', lat:21.0188, lon:105.8133, key:'lotte center'},
+  {name:'Big C Thăng Long', lat:21.0094, lon:105.7906, key:'big c thang long'},
+  {name:'Big C Hà Đông', lat:20.9663, lon:105.7826, key:'big c ha dong'},
+  {name:'Sân bay Nội Bài', lat:21.2212, lon:105.8072, key:'noi bai'},
+  {name:'Bến xe Mỹ Đình', lat:21.0286, lon:105.7775, key:'my dinh'},
+  {name:'Bến xe Giáp Bát', lat:20.9786, lon:105.8417, key:'giap bat'},
+  {name:'Hồ Gươm', lat:21.0285, lon:105.8524, key:'ho guom'},
+  {name:'KCN Bắc Thăng Long', lat:21.1296, lon:105.7654, key:'bac thang long'},
+  {name:'MM Mega Market Hoàng Mai', lat:20.9686, lon:105.8538, key:'mega market hoang mai'},
+  {name:'Winmart Royal City', lat:21.0024, lon:105.8157, key:'winmart royal city'},
+];
+const DEFAULT_START = {name:'Kho lạnh CP Pháp Vân', lat:20.9613, lon:105.8403};
+
+/* ============================================================
+   2. STATE
+   ============================================================ */
+let map, routeLayerGroup, truckMarker, startMarker;
+let stops = [];          // ordered delivery stops {name,lat,lon,isAeon,resolved,checked}
+let startPoint = {...DEFAULT_START};
+let routeCoords = [];    // [lat,lon] full polyline
+let cumDist = [];        // cumulative meters matching routeCoords
+let legDist = [];        // distance per leg (start->stop1, stop1->stop2,...)
+let totalDistance = 0;
+
+const sim = {
+  running:false, traveled:0, lastTs:0, checkedIdx:new Set(), zoneIdx:new Set(),
+  lastOverspeed:0, coolAnnounced:false
+};
+
+/* ============================================================
+   3. UTILS
+   ============================================================ */
+function normalize(str){
+  return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').trim();
+}
+function haversine(a,b){
+  const R=6371000, toRad=d=>d*Math.PI/180;
+  const dLat=toRad(b.lat-a.lat), dLon=toRad(b.lon-a.lon);
+  const s = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));
+}
+function logVoice(msg){
+  document.getElementById('voiceLog').textContent = '🔊 ' + msg;
+}
+function speak(text){
+  logVoice(text);
+  if(!document.getElementById('ttsToggle').checked) return;
+  try{
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang='vi-VN'; u.rate=1.02;
+    const voices = speechSynthesis.getVoices();
+    const vi = voices.find(v=>v.lang && v.lang.toLowerCase().startsWith('vi'));
+    if(vi) u.voice = vi;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+function beep(){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type='sine'; o.frequency.value=880;
+    g.gain.setValueAtTime(0.0001,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.25,ctx.currentTime+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.25);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime+0.3);
+  }catch(e){}
+}
+
+/* ============================================================
+   4. PARSE GIỌNG NÓI / VĂN BẢN -> ĐIỂM GIAO
+   ============================================================ */
+const DELIM_RE = /,|\bvà\b|\brồi\b|\bsau đó\b|\btiếp theo\b|\bsau khi\b|\bthì\b|\bxong(?: rồi)?\b|\bcuối cùng\b/giu;
+const PREFIX_RE = /^(giao hàng tại|giao hàng ở|giao hàng đến|giao hàng tới|giao tại|giao ở|giao đến|giao tới|đi đến|đi tới|quay về|quay lại|ghé qua|đến|tới|ghé|về|qua|ở|tại|là)\s+/iu;
+
+function stripPrefixes(s){
+  let prev;
+  do{ prev=s; s=s.replace(PREFIX_RE,'').trim(); }while(s!==prev);
+  return s;
+}
+function matchLocation(segment){
+  const norm = normalize(segment);
+  if(norm.length<2) return null;
+  let best=null, bestLen=0;
+  for(const loc of LOCATIONS){
+    if(norm.includes(loc.key) || loc.key.includes(norm)){
+      if(loc.key.length>bestLen){ best=loc; bestLen=loc.key.length; }
+    }
+  }
+  return best;
+}
+function parseRouteTextSegments(text){
+  return text.split(DELIM_RE).map(s=>s.trim()).filter(s=>s.length>1);
+}
+function extractSegmentsBasic(text){
+  return parseRouteTextSegments(text).map(s=>stripPrefixes(s)).filter(s=>s.length>1);
+}
+
+/* AI (Claude) extraction of stop names from free-form Vietnamese text */
+async function aiExtractStops(text){
+  const prompt = `Bạn là hệ thống bóc tách điểm giao hàng từ văn bản tiếng Việt cho xe tải đông lạnh.
+Văn bản: "${text}"
+Trả lời DUY NHẤT một mảng JSON các chuỗi, mỗi chuỗi là tên một địa điểm/điểm giao hàng được nhắc đến, theo đúng thứ tự xuất hiện trong văn bản, đã chuẩn hoá tên đầy đủ (loại bỏ các từ nối như "giao hàng tại", "rồi về", "ghé", "sau đó", "tiếp theo"...). Không thêm giải thích, không dùng markdown, không có chữ nào khác ngoài mảng JSON.
+Ví dụ đầu ra: ["Aeon Mall Long Biên","Chợ Đồng Xuân","Royal City"]`;
+  const res = await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({model:'claude-sonnet-4-6', max_tokens:500, messages:[{role:'user', content:prompt}]})
+  });
+  if(!res.ok) throw new Error('AI request failed');
+  const data = await res.json();
+  const txt = (data.content||[]).map(b=>b.text||'').join('').trim();
+  const clean = txt.replace(/```json|```/gi,'').trim();
+  const arr = JSON.parse(clean);
+  if(!Array.isArray(arr)) throw new Error('Bad AI output');
+  return arr.filter(s=>typeof s==='string' && s.trim().length>1);
+}
+
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+/* Geocode via OpenStreetMap Nominatim for places not in the local dictionary */
+async function geocodeNominatim(name){
+  try{
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=vn&q=${encodeURIComponent(name)}`;
+    const res = await fetch(url);
+    if(!res.ok) return null;
+    const data = await res.json();
+    if(data && data.length) return {lat:parseFloat(data[0].lat), lon:parseFloat(data[0].lon)};
+  }catch(e){}
+  return null;
+}
+
+/* Resolve a list of place-name strings into coordinates: local dictionary first, then Nominatim */
+async function resolveStops(names){
+  const result=[];
+  for(const raw of names){
+    const cleaned = stripPrefixes(String(raw).trim());
+    if(!cleaned) continue;
+    const loc = matchLocation(cleaned);
+    if(loc){
+      result.push({name:loc.name, lat:loc.lat, lon:loc.lon, isAeon:normalize(loc.name).includes('aeon'), resolved:true, source:'local'});
+      continue;
+    }
+    const display = cleaned.replace(/\b\w/g, c=>c.toUpperCase());
+    const geo = await geocodeNominatim(cleaned+', Việt Nam');
+    if(geo){
+      result.push({name:display, lat:geo.lat, lon:geo.lon, isAeon:normalize(cleaned).includes('aeon'), resolved:true, source:'osm'});
+    }else{
+      result.push({name:display, lat:null, lon:null, isAeon:false, resolved:false});
+    }
+    await sleep(300); // tôn trọng giới hạn tần suất của Nominatim (~1 req/s)
+  }
+  return result;
+}
+
+
+/* ============================================================
+   5. BÓC TÁCH TOẠ ĐỘ GPS
+   ============================================================ */
+function parseGPS(str){
+  const matches = str.match(/-?\d{1,3}(?:\.\d+)?/g);
+  if(!matches || matches.length<2) return null;
+  let a = parseFloat(matches[0]), b = parseFloat(matches[1]);
+  // Việt Nam: lat ~ 8-24, lon ~ 102-110
+  let lat,lon;
+  if(a>=8 && a<=24 && b>=100 && b<=112){ lat=a; lon=b; }
+  else if(b>=8 && b<=24 && a>=100 && a<=112){ lat=b; lon=a; }
+  else { lat=a; lon=b; }
+  return {lat,lon};
+}
+
+/* ============================================================
+   6. THUẬT TOÁN TỐI ƯU: AEON TRƯỚC + NEAREST NEIGHBOR
+   ============================================================ */
+function nearestNeighborOrder(start, points){
+  const remaining = [...points];
+  const order = [];
+  let current = start;
+  while(remaining.length){
+    remaining.sort((a,b)=> haversine(current,a)-haversine(current,b));
+    const next = remaining.shift();
+    order.push(next);
+    current = next;
+  }
+  return order;
+}
+function optimizeRoute(start, points){
+  const resolved = points.filter(p=>p.resolved);
+  const aeon = resolved.filter(p=>p.isAeon);
+  const others = resolved.filter(p=>!p.isAeon);
+  const aeonOrdered = nearestNeighborOrder(start, aeon);
+  const lastPoint = aeonOrdered.length ? aeonOrdered[aeonOrdered.length-1] : start;
+  const othersOrdered = nearestNeighborOrder(lastPoint, others);
+  const unresolved = points.filter(p=>!p.resolved);
+  return [...aeonOrdered, ...othersOrdered, ...unresolved];
+}
+
+/* ============================================================
+   7. BẢN ĐỒ (LEAFLET) + OSRM
+   ============================================================ */
+function initMap(){
+  map = L.map('map', {zoomControl:true, attributionControl:true}).setView([startPoint.lat, startPoint.lon], 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:19, attribution:'&copy; OpenStreetMap'
+  }).addTo(map);
+  routeLayerGroup = L.layerGroup().addTo(map);
+  placeStartMarker();
+}
+function pinIcon(label, cls){
+  return L.divIcon({className:'', html:`<div class="pin ${cls||''}">${label}</div>`, iconSize:[28,28], iconAnchor:[14,14]});
+}
+function placeStartMarker(){
+  if(startMarker) map.removeLayer(startMarker);
+  startMarker = L.marker([startPoint.lat,startPoint.lon], {icon:pinIcon('🏁','start')})
+    .addTo(map).bindPopup(`<b>${startPoint.name}</b><br>Điểm xuất phát`);
+}
+
+async function fetchOSRMRoute(points){
+  // points: [{lat,lon}, ...] gồm điểm xuất phát + các điểm giao
+  const coordStr = points.map(p=>`${p.lon},${p.lat}`).join(';');
+  const url = `https://router.project-osrm.org/route/v1/driving/${coordStr}?overview=full&geometries=geojson&steps=false`;
+  try{
+    const res = await fetch(url);
+    const data = await res.json();
+    if(data.code!=='Ok' || !data.routes || !data.routes.length) throw new Error('OSRM no route');
+    const route = data.routes[0];
+    return {
+      coords: route.geometry.coordinates.map(c=>[c[1],c[0]]), // -> [lat,lon]
+      legs: route.legs.map(l=>l.distance),
+      total: route.distance
+    };
+  }catch(e){
+    // fallback: đường chim bay
+    const coords = points.map(p=>[p.lat,p.lon]);
+    const legs=[]; let total=0;
+    for(let i=1;i<points.length;i++){ const d=haversine(points[i-1],points[i]); legs.push(d); total+=d; }
+    return {coords, legs, total, fallback:true};
+  }
+}
+
+function buildCumDist(coords){
+  const cum=[0];
+  for(let i=1;i<coords.length;i++){
+    const d = haversine({lat:coords[i-1][0],lon:coords[i-1][1]}, {lat:coords[i][0],lon:coords[i][1]});
+    cum.push(cum[i-1]+d);
+  }
+  return cum;
+}
+
+/* Real-time traffic flow from TomTom (used when user supplies an API key) */
+async function getTomTomColor(lat,lon,key){
+  try{
+    const url = `https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point=${lat},${lon}&key=${encodeURIComponent(key)}`;
+    const res = await fetch(url);
+    if(!res.ok) return null;
+    const data = await res.json();
+    const fs = data.flowSegmentData;
+    if(!fs || !fs.freeFlowSpeed) return null;
+    const ratio = fs.currentSpeed/fs.freeFlowSpeed;
+    if(ratio>0.75) return '#3fd18b';
+    if(ratio>0.4) return '#ffb648';
+    return '#ff5e5e';
+  }catch(e){ return null; }
+}
+
+async function drawRoute(coords, fallback){
+  routeLayerGroup.clearLayers();
+  const trafficOn = document.getElementById('trafficToggle').checked;
+  const tomtomKey = document.getElementById('tomtomKey').value.trim();
+  const legendNote = document.getElementById('legendNote');
+
+  if(!trafficOn){
+    L.polyline(coords, {color:'#3fd18b', weight:5, opacity:0.85}).addTo(routeLayerGroup);
+    legendNote.textContent = '(đang tắt)';
+  }else if(tomtomKey){
+    legendNote.textContent = '· dữ liệu thực TomTom';
+    const segs=8, n=coords.length;
+    const chunk = Math.max(1, Math.floor(n/segs));
+    for(let i=0;i<n-1;i+=chunk){
+      const end = Math.min(n-1, i+chunk);
+      const mid = coords[Math.floor((i+end)/2)];
+      const color = await getTomTomColor(mid[0], mid[1], tomtomKey) || '#3fd18b';
+      L.polyline(coords.slice(i,end+1), {color, weight:6, opacity:0.85}).addTo(routeLayerGroup);
+    }
+  }else{
+    legendNote.textContent = '· dữ liệu mô phỏng (DEMO)';
+    const segs=10, n=coords.length;
+    const chunk = Math.max(1, Math.floor(n/segs));
+    const colors = {normal:'#3fd18b', slow:'#ffb648', jam:'#ff5e5e'};
+    for(let i=0;i<n-1;i+=chunk){
+      const end = Math.min(n-1, i+chunk);
+      const r = Math.random();
+      const level = r<0.55?'normal': r<0.8?'slow':'jam';
+      L.polyline(coords.slice(i,end+1), {color:colors[level], weight:6, opacity:0.85}).addTo(routeLayerGroup);
+    }
+  }
+
+  if(fallback){
+    L.polyline(coords, {color:'#5ee6d0', weight:2, dashArray:'4 6', opacity:0.6}).addTo(routeLayerGroup);
+  }
+  // markers
+  stops.forEach((s,i)=>{
+    if(!s.resolved) return;
+    const label = s.isAeon ? 'AEON' : String(i+1);
+    const m = L.marker([s.lat,s.lon], {icon:pinIcon(label, s.isAeon?'aeon':'')}).addTo(routeLayerGroup);
+    m.bindPopup(`<b>${i+1}. ${s.name}</b>${s.isAeon?'<br><i>Siêu thị AEON — ưu tiên hàng đầu</i>':''}`);
+    m.on('click', ()=> map.flyTo([s.lat,s.lon], 15));
+  });
+  // truck marker
+  if(truckMarker) map.removeLayer(truckMarker);
+  const truckPos = (totalDistance>0 && cumDist.length===coords.length) ? positionAtDistance(sim.traveled) : coords[0];
+  truckMarker = L.marker(truckPos, {icon: L.divIcon({className:'', html:'<div class="truck-icon">🚚</div>', iconSize:[30,30], iconAnchor:[15,15]})}).addTo(map);
+
+  const bounds = L.latLngBounds(coords);
+  map.fitBounds(bounds, {padding:[40,40]});
+}
+
+/* ============================================================
+   8. RENDER DANH SÁCH ĐIỂM GIAO
+   ============================================================ */
+function renderStopList(){
+  const list = document.getElementById('stopList');
+  document.getElementById('stopCount').textContent = stops.length;
+  if(!stops.length){
+    list.innerHTML = '<div class="empty">Chưa có điểm giao nào. Nhập lộ trình ở trên rồi nhấn “Tối ưu lộ trình”.</div>';
+    return;
+  }
+  let html = `<div class="stop start"><div class="badge">🏁</div><div class="meta"><div class="name">${startPoint.name}</div><div class="sub">Điểm xuất phát</div></div></div>`;
+  stops.forEach((s,i)=>{
+    const distKm = legDist[i] ? (legDist[i]/1000).toFixed(1)+' km' : '—';
+    let cls = 'stop';
+    if(s.isAeon) cls+=' aeon';
+    if(!s.resolved) cls+=' unresolved';
+    if(s.checked) cls+=' done';
+    const badge = !s.resolved ? '?' : (s.isAeon ? 'AEON' : (i+1));
+    const sub = !s.resolved ? 'Không xác định được vị trí' : `Chặng: ${distKm}${s.isAeon?' · Ưu tiên AEON':''}`;
+    const srcBadge = (s.resolved && s.source==='osm') ? '<span class="src-badge">OSM</span>' : '';
+    const status = s.checked ? '✅' : '⏳';
+    html += `<div class="${cls}" data-idx="${i}"><div class="badge">${badge}</div><div class="meta"><div class="name">${s.name}${srcBadge}</div><div class="sub">${sub}</div></div><div class="status">${status}</div></div>`;
+  });
+  list.innerHTML = html;
+  list.querySelectorAll('.stop[data-idx]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const i = +el.dataset.idx;
+      const s = stops[i];
+      if(s.resolved) map.flyTo([s.lat,s.lon], 15);
+    });
+  });
+}
+
+/* ============================================================
+   9. SPEED HUD (GAUGE)
+   ============================================================ */
+const GAUGE_MIN_ANGLE=-130, GAUGE_MAX_ANGLE=130, GAUGE_MAX_SPEED=130;
+function angleForSpeed(v){
+  const c = Math.max(0, Math.min(GAUGE_MAX_SPEED, v));
+  return GAUGE_MIN_ANGLE + (c/GAUGE_MAX_SPEED)*(GAUGE_MAX_ANGLE-GAUGE_MIN_ANGLE);
+}
+function polarToCartesian(cx,cy,r,angleDeg){
+  const a=(angleDeg-90)*Math.PI/180;
+  return {x:cx+r*Math.cos(a), y:cy+r*Math.sin(a)};
+}
+function describeArc(cx,cy,r,startAngle,endAngle){
+  const start=polarToCartesian(cx,cy,r,endAngle);
+  const end=polarToCartesian(cx,cy,r,startAngle);
+  const largeArc = (endAngle-startAngle)<=180 ? '0':'1';
+  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 0 ${end.x} ${end.y}`;
+}
+function initGaugeTicks(){
+  const g = document.getElementById('ticks');
+  let html='';
+  for(let v=0; v<=GAUGE_MAX_SPEED; v+=20){
+    const ang = angleForSpeed(v);
+    const p1 = polarToCartesian(100,100,82,ang);
+    const p2 = polarToCartesian(100,100,72,ang);
+    const lp = polarToCartesian(100,100,62,ang);
+    html += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="#5ee6d0" stroke-width="2" opacity="0.5"/>`;
+    html += `<text x="${lp.x}" y="${lp.y}" fill="#7fa0a0" font-size="9" font-family="Rajdhani" text-anchor="middle" dominant-baseline="middle">${v}</text>`;
+  }
+  g.innerHTML = html;
+  document.getElementById('arcBg').setAttribute('d', describeArc(100,100,92,GAUGE_MIN_ANGLE,GAUGE_MAX_ANGLE));
+}
+function updateGaugeZones(limit){
+  const limAngle = angleForSpeed(limit);
+  document.getElementById('arcSafe').setAttribute('d', describeArc(100,100,92,GAUGE_MIN_ANGLE,limAngle));
+  document.getElementById('arcDanger').setAttribute('d', describeArc(100,100,92,limAngle,GAUGE_MAX_ANGLE));
+  document.getElementById('limText').textContent = `Giới hạn ${limit}`;
+}
+function updateGaugeNeedle(speed, limit){
+  const ang = angleForSpeed(speed);
+  const needle = document.getElementById('needle');
+  needle.setAttribute('transform', `rotate(${ang} 100 100)`);
+  needle.classList.toggle('over', speed>limit);
+  document.getElementById('speedVal').textContent = Math.round(speed);
+}
+
+/* ============================================================
+   10. MÔ PHỎNG DI CHUYỂN
+   ============================================================ */
+function positionAtDistance(d){
+  if(d<=0) return routeCoords[0];
+  if(d>=totalDistance) return routeCoords[routeCoords.length-1];
+  for(let i=1;i<cumDist.length;i++){
+    if(cumDist[i]>=d){
+      const segLen = cumDist[i]-cumDist[i-1];
+      const t = segLen>0 ? (d-cumDist[i-1])/segLen : 0;
+      const a=routeCoords[i-1], b=routeCoords[i];
+      return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t];
+    }
+  }
+  return routeCoords[routeCoords.length-1];
+}
+function checkProximity(pos){
+  stops.forEach((s,i)=>{
+    if(!s.resolved || s.checked) return;
+    const d = haversine({lat:pos[0],lon:pos[1]}, {lat:s.lat,lon:s.lon});
+    if(d<=350){
+      s.checked = true;
+      sim.checkedIdx.add(i);
+      beep();
+      speak(`Đã đến gần ${s.name}. Hệ thống tự động ghi nhận đã giao hàng.`);
+      renderStopList();
+    } else if(d<=1000 && !sim.zoneIdx.has(i)){
+      sim.zoneIdx.add(i);
+      speak(`Đang đi vào khu vực đông dân cư gần ${s.name}, chú ý người đi bộ và giảm tốc độ.`);
+    }
+  });
+}
+function updateHUDInfo(pos){
+  // điểm kế tiếp chưa hoàn thành
+  const next = stops.find(s=>s.resolved && !s.checked);
+  document.getElementById('nextStopName').textContent = next ? next.name : (stops.length? 'Đã hoàn thành tất cả' : '—');
+  const remain = Math.max(0, totalDistance - sim.traveled);
+  document.getElementById('distRemain').textContent = (remain/1000).toFixed(1)+' km';
+  const pct = totalDistance>0 ? Math.min(100, (sim.traveled/totalDistance)*100) : 0;
+  document.getElementById('progressPct').textContent = Math.round(pct)+'%';
+}
+function animate(ts){
+  if(!sim.running) return;
+  if(!sim.lastTs) sim.lastTs = ts;
+  const dtReal = (ts-sim.lastTs)/1000;
+  sim.lastTs = ts;
+  const accel = +document.getElementById('accelSlider').value;
+  const speedKmh = +document.getElementById('speedSlider').value;
+  const limit = +document.getElementById('limitSlider').value;
+  const dtSim = dtReal*accel;
+  const speedMs = speedKmh*1000/3600;
+  sim.traveled += speedMs*dtSim;
+
+  if(!sim.coolAnnounced){
+    sim.coolAnnounced = true;
+    speak('Đã kích hoạt chế độ làm lạnh. Khoang hàng đang phát nguội.');
+  }
+  if(speedKmh>limit && (ts-sim.lastOverspeed>15000)){
+    sim.lastOverspeed = ts;
+    speak('Cảnh báo: bạn đang chạy quá tốc độ cho phép. Vui lòng giảm tốc.');
+  }
+
+  if(sim.traveled>=totalDistance){
+    sim.traveled = totalDistance;
+    sim.running=false;
+    document.getElementById('btnPlay').textContent='▶ Bắt đầu';
+    speak('Đã hoàn thành toàn bộ lộ trình giao hàng.');
+  }
+  const pos = positionAtDistance(sim.traveled);
+  truckMarker.setLatLng(pos);
+  updateGaugeNeedle(speedKmh, limit);
+  checkProximity(pos);
+  updateHUDInfo(pos);
+  if(sim.running) requestAnimationFrame(animate);
+}
+
+/* ============================================================
+   11. SỰ KIỆN UI
+   ============================================================ */
+document.getElementById('sbToggle').addEventListener('click', ()=>{
+  document.getElementById('sidebar').classList.toggle('open');
+});
+
+document.getElementById('btnDemo').addEventListener('click', ()=>{
+  document.getElementById('routeText').value =
+    'giao hàng tại Aeon Long Biên rồi về Chợ Đồng Xuân, tiếp theo ghé Royal City, sau đó tới Times City';
+  document.getElementById('gpsInput').value = '20.9613, 105.8403';
+});
+
+document.getElementById('btnUseGps').addEventListener('click', ()=>{
+  const val = document.getElementById('gpsInput').value;
+  const gps = parseGPS(val);
+  if(!gps){
+    document.getElementById('startHint').innerHTML = '⚠️ Không đọc được toạ độ. Vui lòng dán chuỗi GPS hợp lệ (vd: 21.0245, 105.8412).';
+    return;
+  }
+  startPoint = {name:'Vị trí bảo mật của tôi', lat:gps.lat, lon:gps.lon};
+  document.getElementById('startHint').innerHTML = `📍 Điểm xuất phát đã đặt: <b>${gps.lat.toFixed(5)}, ${gps.lon.toFixed(5)}</b>`;
+  placeStartMarker();
+  map.flyTo([gps.lat,gps.lon], 14);
+  renderStopList();
+});
+
+document.getElementById('btnGeoloc').addEventListener('click', ()=>{
+  if(!navigator.geolocation){
+    document.getElementById('startHint').textContent = '⚠️ Thiết bị không hỗ trợ định vị GPS.';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const {latitude,longitude}=pos.coords;
+    document.getElementById('gpsInput').value = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+    startPoint = {name:'Vị trí bảo mật của tôi', lat:latitude, lon:longitude};
+    document.getElementById('startHint').innerHTML = `📍 Điểm xuất phát đã đặt: <b>${latitude.toFixed(5)}, ${longitude.toFixed(5)}</b>`;
+    placeStartMarker();
+    map.flyTo([latitude,longitude], 14);
+    renderStopList();
+  }, err=>{
+    document.getElementById('startHint').textContent = '⚠️ Không lấy được vị trí (trình duyệt từ chối quyền truy cập). Hãy dán toạ độ thủ công.';
+  });
+});
+
+// Voice recognition (Web Speech API)
+let recog=null, listening=false;
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+const btnMic = document.getElementById('btnMic');
+if(SpeechRec){
+  recog = new SpeechRec();
+  recog.lang='vi-VN'; recog.continuous=false; recog.interimResults=false;
+  recog.onresult = e=>{
+    const text = e.results[0][0].transcript;
+    const ta = document.getElementById('routeText');
+    ta.value = ta.value ? ta.value+' '+text : text;
+  };
+  recog.onend = ()=>{ listening=false; btnMic.classList.remove('listening'); };
+  recog.onerror = ()=>{ listening=false; btnMic.classList.remove('listening'); };
+}else{
+  btnMic.title='Trình duyệt không hỗ trợ nhận diện giọng nói';
+}
+btnMic.addEventListener('click', ()=>{
+  if(!recog) return alert('Trình duyệt này không hỗ trợ nhận diện giọng nói. Hãy dùng Chrome.');
+  if(listening){ recog.stop(); return; }
+  listening=true; btnMic.classList.add('listening');
+  recog.start();
+});
+
+// TTS dot indicator
+document.getElementById('ttsToggle').addEventListener('change', e=>{
+  const on = e.target.checked;
+  document.getElementById('ttsDot').classList.toggle('on', on);
+  document.getElementById('ttsState').textContent = on?'bật':'tắt';
+});
+
+// Sliders
+document.getElementById('speedSlider').addEventListener('input', e=>{
+  document.getElementById('speedLabel').textContent = e.target.value+' km/h';
+});
+document.getElementById('limitSlider').addEventListener('input', e=>{
+  const v=+e.target.value;
+  document.getElementById('limitLabel').textContent = v+' km/h';
+  updateGaugeZones(v);
+});
+document.getElementById('accelSlider').addEventListener('input', e=>{
+  document.getElementById('accelLabel').textContent = '×'+e.target.value;
+});
+
+// Play / Pause
+document.getElementById('btnPlay').addEventListener('click', ()=>{
+  if(!routeCoords.length){ alert('Hãy phân tích & tối ưu lộ trình trước khi bắt đầu mô phỏng.'); return; }
+  sim.running = !sim.running;
+  const btn = document.getElementById('btnPlay');
+  if(sim.running){
+    btn.textContent='⏸ Tạm dừng';
+    sim.lastTs=0;
+    requestAnimationFrame(animate);
+  }else{
+    btn.textContent='▶ Tiếp tục';
+  }
+});
+// Reset
+document.getElementById('btnReset').addEventListener('click', ()=>{
+  sim.running=false; sim.traveled=0; sim.lastTs=0; sim.checkedIdx.clear(); sim.zoneIdx.clear();
+  sim.lastOverspeed=0; sim.coolAnnounced=false;
+  document.getElementById('btnPlay').textContent='▶ Bắt đầu';
+  stops.forEach(s=>s.checked=false);
+  if(routeCoords.length) truckMarker.setLatLng(routeCoords[0]);
+  updateGaugeNeedle(0, +document.getElementById('limitSlider').value);
+  document.getElementById('voiceLog').textContent = '🔇 Trợ lý giọng nói chưa hoạt động.';
+  renderStopList();
+  updateHUDInfo(routeCoords[0]||[startPoint.lat,startPoint.lon]);
+});
+
+// Re-render traffic coloring when toggled (keeps current route)
+document.getElementById('trafficToggle').addEventListener('change', ()=>{
+  if(routeCoords.length) drawRoute(routeCoords, false);
+});
+
+// Optimize button
+document.getElementById('btnOptimize').addEventListener('click', async ()=>{
+  const text = document.getElementById('routeText').value.trim();
+  if(!text){ alert('Vui lòng nhập mô tả lộ trình giao hàng.'); return; }
+  const btn = document.getElementById('btnOptimize');
+  const resetBtn = ()=>{ btn.disabled=false; btn.textContent='🤖 Phân tích & Tối ưu lộ trình (AI)'; };
+  btn.disabled=true; btn.textContent='⏳ Đang phân tích văn bản...';
+
+  let names;
+  if(document.getElementById('aiToggle').checked){
+    try{ names = await aiExtractStops(text); }
+    catch(e){ names = extractSegmentsBasic(text); }
+  }else{
+    names = extractSegmentsBasic(text);
+  }
+  if(!names.length){
+    alert('Không tách được điểm giao nào từ văn bản. Hãy thử mô tả rõ hơn.');
+    resetBtn(); return;
+  }
+
+  btn.textContent='⏳ Đang tra cứu vị trí...';
+  const resolvedList = await resolveStops(names);
+  stops = optimizeRoute(startPoint, resolvedList);
+
+  const waypoints = [startPoint, ...stops.filter(s=>s.resolved)];
+  if(waypoints.length<2){
+    alert('Không xác định được điểm giao nào hợp lệ. Hãy thử lại với tên địa điểm rõ ràng hơn (vd: Aeon Long Biên, Chợ Đồng Xuân, hoặc địa chỉ cụ thể).');
+    renderStopList();
+    resetBtn(); return;
+  }
+
+  btn.textContent='⏳ Đang định tuyến (OSRM)...';
+  const {coords, legs, total, fallback} = await fetchOSRMRoute(waypoints);
+  routeCoords = coords;
+  cumDist = buildCumDist(coords);
+  totalDistance = total;
+  legDist = legs;
+
+  btn.textContent='⏳ Đang vẽ bản đồ & giao thông...';
+  await drawRoute(coords, fallback);
+  renderStopList();
+  sim.traveled=0; sim.checkedIdx.clear(); sim.zoneIdx.clear(); sim.coolAnnounced=false; sim.lastOverspeed=0;
+  updateGaugeNeedle(0, +document.getElementById('limitSlider').value);
+  updateHUDInfo(coords[0]);
+
+  resetBtn();
+  if(fallback){
+    speak('Không thể kết nối dữ liệu định tuyến thực tế, hiển thị đường đi ước lượng.');
+  }else{
+    const osmCount = stops.filter(s=>s.source==='osm').length;
+    const unresolvedCount = stops.filter(s=>!s.resolved).length;
+    let msg = `Đã tối ưu lộ trình với ${stops.filter(s=>s.resolved).length} điểm giao. Sẵn sàng xuất phát.`;
+    if(unresolvedCount>0) msg += ` Có ${unresolvedCount} điểm không xác định được vị trí.`;
+    speak(msg);
+  }
+});
+
+/* ============================================================
+   12. KHỞI TẠO
+   ============================================================ */
+initMap();
+initGaugeTicks();
+updateGaugeZones(50);
+updateGaugeNeedle(0,50);
+renderStopList();
+document.getElementById('legendNote').textContent = '(chưa có lộ trình)';
+</script>
+</body>
+</html>
